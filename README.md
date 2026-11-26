@@ -42,16 +42,17 @@ Restart if asked, then open "Ubuntu 24.04" from the Start menu and create your L
 
 ### 2. Give WSL enough memory
 
-By default WSL gets half your RAM (8 GB), which is too little. Create the file `%UserProfile%\.wslconfig`
-(for example `C:\Users\you\.wslconfig`) with:
+By default WSL gets half your RAM (8 GB), which is too little. The settings file `%UserProfile%\.wslconfig`
+(for example `C:\Users\you\.wslconfig`) doesn't exist until you create it. In PowerShell:
 
-```ini
-[wsl2]
-memory=10GB
+```powershell
+Set-Content -Path "$env:USERPROFILE\.wslconfig" -Value "[wsl2]`nmemory=10GB" -Encoding ascii
+Get-Content "$env:USERPROFILE\.wslconfig"   # should print [wsl2] and memory=10GB
+wsl --shutdown
 ```
 
-Then, in PowerShell: `wsl --shutdown`, and open Ubuntu again. That leaves about 6 GB for Windows, Teams and a
-browser.
+Open Ubuntu again; `free -h` should now show about 9.7Gi in total. That leaves about 6 GB for Windows, Teams and
+a browser. (If you make the file in Notepad instead, check it isn't saved as `.wslconfig.txt`: WSL ignores that.)
 
 ### 3. Install Docker Engine in Ubuntu
 
