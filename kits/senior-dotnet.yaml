@@ -1,0 +1,257 @@
+# Interview kit: Senior .NET Developer (first round, ~30 minutes).
+# Everything here is read aloud, so keep sentences short and conversational.
+# Edit freely. The service checks this file when it starts and shows any
+# problems on the dashboard.
+
+role: Senior .NET Developer
+duration_minutes: 30
+
+intro_script: >-
+  Hi, and thanks for joining. I'm an AI interviewer helping the engineering
+  team with first-round interviews for the Senior .NET Developer role. This
+  conversation is recorded and transcribed, and an engineer on the team
+  reviews everything, so a person makes every decision. We'll talk for about
+  thirty minutes about your experience and a few technical topics. Take your
+  time with your answers, and if you'd like a question repeated, just ask.
+  Is that OK with you?
+
+closing_script: >-
+  That's everything from me. Thank you for your time today. The hiring team
+  will review this conversation and they'll be in touch about next steps.
+  Have a great day.
+
+# Minutes per stage. They must add up to no more than duration_minutes.
+stage_minutes:
+  intro: 1
+  warmup: 2
+  experience: 5
+  technical: 18
+  candidate_questions: 3
+  close: 1
+
+warmup_questions:
+  - To start, could you give me a quick overview of your current role and the kind of systems you work on?
+
+experience_questions:
+  - Tell me about a recent project you're proud of. What was your part in it, and what made it hard?
+  - Think of a technical decision you made that turned out to be wrong. What happened, and what did you change afterwards?
+
+# The topics this interview covers, in order (ids from the topic bank below).
+interview_topics:
+  - csharp_runtime
+  - aspnet_api
+  - system_design
+
+# Topic bank. Swap topics in and out of interview_topics above.
+topics:
+  - id: csharp_runtime
+    name: C# and the .NET runtime
+    questions:
+      - ask: >-
+          Let's talk about async code in .NET. When you await an async method,
+          what actually happens under the hood, and where have you seen async
+          code cause problems in production?
+        follow_ups:
+          - What happens if you call dot Result or dot Wait on a task in an ASP.NET Core app, and why?
+          - When would you use ValueTask instead of Task?
+          - How would you track down a memory leak or high garbage collection pressure in a .NET service?
+        look_for:
+          - continuations or the compiler's state machine; threads aren't blocked while awaiting
+          - sync-over-async, deadlocks or thread-pool starvation
+          - cancellation tokens and ConfigureAwait
+          - a real production example and how it was diagnosed
+    rubric:
+      1: Can't explain what await does beyond "it runs in the background"; no real examples.
+      2: Knows the basics (non-blocking, Task) but is vague on pitfalls; examples are generic.
+      3: Explains continuations and thread-pool behaviour, names pitfalls like sync-over-async, and gives a real example.
+      4: Precise mental model (state machine, synchronization context, thread-pool starvation); has diagnosed real issues with tools like dotnet-counters or memory dumps; knows trade-offs like ValueTask.
+
+  - id: aspnet_api
+    name: ASP.NET Core and API design
+    questions:
+      - ask: >-
+          Say you're designing a new public REST API in ASP.NET Core that other
+          teams will depend on. Walk me through how you'd structure it, from
+          the request pipeline to versioning and error handling.
+        follow_ups:
+          - How does the middleware pipeline work, and where would you put authentication and exception handling?
+          - How would you version the API without breaking existing clients?
+          - Which service lifetimes do you use in dependency injection, and what goes wrong if you mix them up?
+        look_for:
+          - middleware order
+          - dependency injection lifetimes and captive dependencies
+          - a consistent error contract, for example ProblemDetails
+          - a versioning strategy that protects existing clients
+          - authentication, validation and idempotency
+    rubric:
+      1: Describes controllers only; no view of the pipeline, errors or versioning.
+      2: Covers routing and controllers with some error handling; versioning and DI lifetimes are vague.
+      3: Clear pipeline and middleware order, a consistent error contract, a sensible versioning plan and correct DI lifetimes.
+      4: All of level 3, plus trade-offs (URL vs header versioning, minimal APIs vs controllers), backwards compatibility, idempotency, rate limiting and observability from real experience.
+
+  - id: data_access
+    name: Data access with EF Core and SQL
+    questions:
+      - ask: >-
+          Tell me about a time an Entity Framework Core query or a database
+          call became a performance problem. How did you find it, and how did
+          you fix it?
+        follow_ups:
+          - What is the N plus one query problem, and how do you avoid it in EF Core?
+          - When would you skip EF Core and write raw SQL or use Dapper?
+          - How do you handle two users updating the same record at the same time?
+        look_for:
+          - measuring first, by logging the SQL or reading query plans
+          - N plus one, Include or projections, AsNoTracking
+          - indexes
+          - transactions and optimistic concurrency with row versions
+    rubric:
+      1: No concrete example; treats the ORM as a black box.
+      2: Knows some fixes, like adding an index or Include, but can't explain how the problem was found.
+      3: A real example with measurement; explains N plus one and change tracking, knows when to use raw SQL, handles concurrency.
+      4: Reads execution plans, designs indexes, chooses isolation levels, and explains optimistic vs pessimistic concurrency with trade-offs.
+
+  - id: system_design
+    name: System design and architecture
+    questions:
+      - ask: >-
+          Imagine an order-processing system that has outgrown a single
+          ASP.NET Core application. Would you split it into microservices,
+          keep a modular monolith, or something in between? Talk me through
+          how you'd decide.
+        follow_ups:
+          - How would the services talk to each other, and what happens when one of them is down?
+          - Where would you add caching, and how would you stop the cache serving stale data?
+          - How do you make sure an order isn't processed twice if a message is delivered twice?
+        look_for:
+          - decision criteria such as team size, deployment needs and data ownership
+          - synchronous calls versus messaging and queues
+          - retries, timeouts and circuit breakers
+          - idempotency and the outbox pattern
+          - cache invalidation
+    rubric:
+      1: Jumps to a buzzword answer with no reasoning about trade-offs.
+      2: Names patterns but can't tie them to the problem or explain failure modes.
+      3: Weighs monolith against microservices with clear criteria and handles failures and idempotency sensibly.
+      4: Strong trade-off reasoning, data ownership, the outbox pattern and eventual consistency, observability, and a migration path from real experience.
+
+  - id: cloud_devops
+    name: Cloud and DevOps
+    questions:
+      - ask: >-
+          How do you get a .NET service from a pull request into production?
+          Describe the pipeline and the Azure or cloud services you'd use, and
+          how you'd know it's healthy once it's deployed.
+        follow_ups:
+          - How would you roll back a bad release quickly?
+          - What would you log, measure and alert on for an API like this?
+          - How do you keep secrets like connection strings out of the code?
+        look_for:
+          - CI/CD stages with automated tests
+          - containers on AKS, or App Service
+          - safe deployment strategies such as blue-green, canary or slots
+          - logs, metrics and traces, for example OpenTelemetry or Application Insights
+          - Key Vault and managed identities
+    rubric:
+      1: Only manual deployment experience; no monitoring.
+      2: Knows a CI/CD tool but little about release safety or monitoring.
+      3: A solid pipeline with tests, a safe deployment strategy, monitoring and secret management.
+      4: Has designed pipelines with progressive delivery, SLOs and alerting, infrastructure as code, and lessons from incidents.
+
+  - id: quality
+    name: Code quality and testing
+    questions:
+      - ask: >-
+          How do you decide what to test in a .NET codebase, and what does a
+          good test look like to you?
+        follow_ups:
+          - Where do you draw the line between unit tests and integration tests?
+          - What do you look for when you review someone else's pull request?
+          - Tell me about a time you improved a piece of messy code without breaking it.
+        look_for:
+          - testing based on risk, not coverage numbers
+          - mocking only at boundaries
+          - integration tests with real dependencies, for example WebApplicationFactory or Testcontainers
+          - code review focused on correctness, readability and design
+          - refactoring safely in small steps
+    rubric:
+      1: Tests are an afterthought; can't say what makes a test good.
+      2: Writes unit tests but over-mocks; a vague view of integration testing.
+      3: A risk-based strategy, a clear split between unit and integration tests, and a thoughtful review approach.
+      4: Drives quality for the team, with test architecture, testing legacy code, measurable improvements and mentoring through reviews.
+
+  - id: seniority
+    name: Seniority and leadership
+    questions:
+      - ask: >-
+          As a senior developer, how do you help the engineers around you get
+          better? Give me a specific example.
+        follow_ups:
+          - Tell me about a time you disagreed with a technical decision. How did you handle it?
+          - Walk me through a production incident you were involved in. What did you do, and what changed afterwards?
+        look_for:
+          - concrete mentoring examples
+          - influencing decisions with evidence
+          - ownership during incidents and blameless follow-up
+          - explaining technical trade-offs to non-engineers
+    rubric:
+      1: No examples beyond their own tasks.
+      2: Some helping out, but reactive and without clear impact.
+      3: Concrete mentoring and decision-making examples; owns incidents and their follow-ups.
+      4: Multiplies the team by setting standards, resolving disagreements constructively, and leading incident response and lasting improvements.
+
+# Answers the AI may give when the candidate asks questions.
+# Add company-specific ones here (team, tech stack, location, hybrid policy).
+# Anything not covered here, including salary, is passed to HR.
+candidate_faq:
+  - q: What happens next?
+    a: The hiring team will review this conversation and contact you about next steps.
+  - q: Who reviews this interview?
+    a: An engineer on the hiring team reviews the recording and the notes. A person makes every decision, not the AI.
+  - q: Can I do this interview with a person instead?
+    a: Yes. Just say so, and I'll let the team know you'd prefer to speak with a person.
+  - q: How long is this interview?
+    a: About thirty minutes in total, including time for your questions.
+  - q: Will I get feedback?
+    a: The hiring team will share next steps with you. I can't share any assessment myself.
+
+# The AI never asks about or comments on these.
+forbidden_topics:
+  - age
+  - how old
+  - marital status
+  - married
+  - marriage
+  - family
+  - children
+  - kids
+  - pregnancy
+  - pregnant
+  - religion
+  - religious
+  - caste
+  - health
+  - disability
+  - salary
+  - compensation
+  - CTC
+
+# Words that help speech recognition with technical terms.
+vocabulary:
+  - C#
+  - .NET
+  - ASP.NET Core
+  - EF Core
+  - LINQ
+  - async/await
+  - Azure
+  - Kubernetes
+  - gRPC
+  - SignalR
+  - middleware
+  - dependency injection
+
+acknowledgments:
+  - Thanks.
+  - Okay, got it.
+  - Thank you.

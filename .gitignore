@@ -1,0 +1,11 @@
+data/
+models/
+vendor/
+certs/
+.env
+deploy/attendee.env
+dist/
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
