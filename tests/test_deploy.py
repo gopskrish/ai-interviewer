@@ -11,8 +11,7 @@ from tests.helpers import REPO
 
 COMPOSE = REPO / "deploy" / "docker-compose.yml"
 SETUP = REPO / "scripts" / "setup.sh"
-SERVICES = {"attendee-app", "attendee-worker", "attendee-scheduler", "postgres", "redis", "minio", "minio-init",
-            "ollama", "interviewer"}
+SERVICES = {"attendee-app", "attendee-worker", "attendee-scheduler", "postgres", "redis", "ollama", "interviewer"}
 
 
 def services():
@@ -71,7 +70,6 @@ def test_compose_services_and_wiring():
     pg = env_of(svc["postgres"])
     assert (pg["POSTGRES_DB"], pg["POSTGRES_USER"], pg["POSTGRES_PASSWORD"]) == (
         "attendee_development", "attendee_development_user", "attendee_development_user")
-    assert "attendee-recordings" in str(svc["minio-init"]) and svc["minio"]["command"] == "server /data"
     assert "ollama:/root/.ollama" in svc["ollama"]["volumes"]
     interviewer = svc["interviewer"]
     assert interviewer["build"] == {"context": "..", "dockerfile": "deploy/interviewer.Dockerfile"}
@@ -80,6 +78,11 @@ def test_compose_services_and_wiring():
     assert interviewer["ports"] == ["127.0.0.1:8443:8443"] and interviewer["env_file"] == ["../.env"]
     assert interviewer["command"] == ("uvicorn interviewer.web.app:create_app --factory --host 0.0.0.0 --port 8443 "
                                       "--ssl-keyfile /certs/server.key --ssl-certfile /certs/server.crt")
+
+
+def test_stack_needs_no_withdrawn_minio_images():
+    text = COMPOSE.read_text()
+    assert "image: minio/" not in text and "minio" not in str(services())
 
 
 def test_no_port_is_published_beyond_localhost():

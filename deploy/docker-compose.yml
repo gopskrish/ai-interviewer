@@ -1,5 +1,7 @@
 # The whole trial stack on one PC. Run from this folder: docker compose up -d
 # Every published port is bound to 127.0.0.1, so nothing is reachable from the network.
+# No object storage: bots are created with recording off, and Attendee only uploads debug files on
+# failure, which it logs and skips when storage isn't there. (MinIO's free images were withdrawn.)
 name: ai-interviewer
 
 x-attendee: &attendee
@@ -9,7 +11,7 @@ x-attendee: &attendee
     - attendee.env
   networks: [stack]
   restart: unless-stopped
-  depends_on: [postgres, redis, minio]
+  depends_on: [postgres, redis]
 
 services:
   attendee-app:
@@ -69,29 +71,6 @@ services:
     networks: [stack]
     restart: unless-stopped
 
-  minio:
-    image: minio/minio
-    command: server /data
-    env_file:
-      - attendee.env
-    volumes:
-      - minio:/data
-    networks: [stack]
-    restart: unless-stopped
-
-  minio-init:
-    image: minio/mc
-    env_file:
-      - attendee.env
-    depends_on: [minio]
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - >-
-        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 2; done;
-        mc mb --ignore-existing local/attendee-recordings
-    networks: [stack]
-    restart: "no"
-
   ollama:
     image: ollama/ollama
     environment:
@@ -127,5 +106,4 @@ networks:
 volumes:
   postgres:
   redis:
-  minio:
   ollama:
