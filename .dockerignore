@@ -1,0 +1,15 @@
+.git
+.venv
+.superpowers
+.pytest_cache
+**/__pycache__
+*.egg-info
+build
+dist
+data
+models
+vendor
+certs
+.env
+deploy/attendee.env
+tests

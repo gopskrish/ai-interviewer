@@ -1,0 +1,131 @@
+# The whole trial stack on one PC. Run from this folder: docker compose up -d
+# Every published port is bound to 127.0.0.1, so nothing is reachable from the network.
+name: ai-interviewer
+
+x-attendee: &attendee
+  build: ../vendor/attendee
+  image: attendee:e7a0b82
+  env_file:
+    - attendee.env
+  networks: [stack]
+  restart: unless-stopped
+  depends_on: [postgres, redis, minio]
+
+services:
+  attendee-app:
+    <<: *attendee
+    environment:
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379/5
+      - ALLOWED_HOSTS=localhost,attendee-app
+      - ENABLE_WAITING_ROOM_STATE_FOR_WEB_BOTS=true
+    ports:
+      - "127.0.0.1:8000:8000"
+    command: python manage.py runserver 0.0.0.0:8000
+    entrypoint: []
+
+  attendee-worker:
+    <<: *attendee
+    environment:
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379/5
+      - ALLOWED_HOSTS=localhost,attendee-app
+      - ENABLE_WAITING_ROOM_STATE_FOR_WEB_BOTS=true
+      - ENABLE_CHROME_SANDBOX=false
+      # The bot's websocket client trusts our local CA (and the usual public ones) through this bundle.
+      - SSL_CERT_FILE=/certs/ca-bundle.pem
+    volumes:
+      - ../certs:/certs:ro
+    command: celery -A attendee worker -l INFO
+
+  attendee-scheduler:
+    <<: *attendee
+    environment:
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379/5
+      - ALLOWED_HOSTS=localhost,attendee-app
+    command: python manage.py run_scheduler
+    entrypoint: []
+
+  postgres:
+    image: postgres:15.3-alpine
+    environment:
+      POSTGRES_DB: attendee_development
+      POSTGRES_USER: attendee_development_user
+      POSTGRES_PASSWORD: attendee_development_user
+      PGDATA: /data/postgres
+    volumes:
+      - postgres:/data/postgres
+    networks: [stack]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis:/data
+    networks: [stack]
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    command: server /data
+    env_file:
+      - attendee.env
+    volumes:
+      - minio:/data
+    networks: [stack]
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc
+    env_file:
+      - attendee.env
+    depends_on: [minio]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 2; done;
+        mc mb --ignore-existing local/attendee-recordings
+    networks: [stack]
+    restart: "no"
+
+  ollama:
+    image: ollama/ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=30m
+    volumes:
+      - ollama:/root/.ollama
+    networks: [stack]
+    restart: unless-stopped
+
+  interviewer:
+    build:
+      context: ..
+      dockerfile: deploy/interviewer.Dockerfile
+    image: ai-interviewer:local
+    env_file:
+      - ../.env
+    volumes:
+      - ../data:/data
+      - ../models:/models
+      - ../certs:/certs:ro
+      - ../kits:/app/kits:ro
+    ports:
+      - "127.0.0.1:8443:8443"
+    command: uvicorn interviewer.web.app:create_app --factory --host 0.0.0.0 --port 8443 --ssl-keyfile /certs/server.key --ssl-certfile /certs/server.crt
+    depends_on: [ollama]
+    networks: [stack]
+    restart: unless-stopped
+
+networks:
+  stack:
+    driver: bridge
+
+volumes:
+  postgres:
+  redis:
+  minio:
+  ollama:
