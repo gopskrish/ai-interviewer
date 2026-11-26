@@ -22,6 +22,16 @@ class FakeClock:
         await asyncio.sleep(0)
 
 
+class LoudnessVad:
+    """A stand-in VAD: any frame louder than RMS 0.01 counts as speech."""
+
+    def speech_probability(self, frame: np.ndarray) -> float:
+        return 1.0 if float(np.sqrt(np.mean(np.square(frame)))) > 0.01 else 0.0
+
+    def reset(self) -> None:
+        pass
+
+
 def tone(seconds: float, rate: int = 16000) -> bytes:
     """A 440 Hz sine wave at amplitude 0.3, as PCM16 mono."""
     n = int(round(seconds * rate))
