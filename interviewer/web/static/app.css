@@ -53,3 +53,4 @@ table.sessions th, table.sessions td { text-align: left; padding: 0.45rem 0.5rem
 .topic .label { font-weight: 600; margin-bottom: 0; }
 .topic .warning { color: var(--bad); }
 code { background: #eef1f4; padding: 0 0.25rem; border-radius: 4px; }
+.report { background: #f6f8fa; padding: 0.75rem; border-radius: 6px; white-space: pre-wrap; }

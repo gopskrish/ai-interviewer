@@ -247,6 +247,10 @@ class SessionRunner:
     # ----- turns -------------------------------------------------------------
 
     def _is_intro_overlap(self, started_at: float | None) -> bool:
+        # Engines without a consent question (the day-one echo check) keep these turns:
+        # there, hearing speech during the greeting is exactly what's being tested.
+        if not getattr(self.engine, "asks_consent", True):
+            return False
         if self.engine.stage != Stage.INTRO or started_at is None:
             return False
         if self._script_active:

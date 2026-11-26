@@ -29,6 +29,7 @@ from interviewer.ai.factory import AIBundle
 from interviewer.attendee import AttendeeClient, AttendeeError, join_timed_out, normalize_meeting_link, status_label
 from interviewer.audio.vad import TurnConfig
 from interviewer.config import Settings
+from interviewer.daycheck import EchoEngine
 from interviewer.engine.engine import EngineLike, InterviewEngine, generate_experience_questions
 from interviewer.kit import Kit
 from interviewer.scoring.evaluator import evaluate_interview
@@ -95,7 +96,7 @@ class SessionManager:
         self.ai = ai
         self.kits = kits
         self.attendee = attendee
-        self._http = http
+        self.http = http
         self._clock = clock
         self._sleep = sleep
         self._engine_factory = engine_factory or self._interview_engine
@@ -146,6 +147,20 @@ class SessionManager:
         self._start_runner(record, self._engine_factory(kit, None), kit.vocabulary)
         self._detached_at[record.id] = self._clock()  # deleted if nobody connects within the grace period
         return record
+
+    async def create_check(self, meeting_link: str) -> SessionRecord:
+        """A day-one check: the bot joins and repeats what it hears. Never scored."""
+        meeting_url = normalize_meeting_link(meeting_link)
+        if self.attendee is None:
+            raise SessionError(NO_ATTENDEE)
+        record = self.store.create("check", "Day-one check", "", meeting_url)
+        self._start_runner(record, EchoEngine())
+        await self._send_bot(record)
+        return record
+
+    def any_live(self) -> bool:
+        return any(not runner.finished.is_set() and (runner.begun or sid in self._sockets)
+                   for sid, runner in self._runners.items())
 
     def _start_runner(self, record: SessionRecord, engine: EngineLike, vocabulary=()) -> SessionRunner:
         config = TurnConfig(end_of_turn_silence_ms=int(self.settings.end_of_turn_silence_s * 1000))
@@ -405,7 +420,7 @@ class SessionManager:
         record.status, record.error = "done", None
         if self.settings.teams_webhook_url and record.kind == "interview":
             try:
-                await post_scorecard(self.settings.teams_webhook_url, card.to_adaptive_card(), self._http)
+                await post_scorecard(self.settings.teams_webhook_url, card.to_adaptive_card(), self.http)
             except Exception as exc:
                 log.warning("posting the scorecard to Teams failed: %s", exc)
                 record.error = f"The scorecard is saved here, but posting it to Teams failed: {exc}"

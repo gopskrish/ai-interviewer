@@ -120,3 +120,37 @@ def test_scripts_are_served_as_javascript(client):
     for name in ("audio-utils.mjs", "practice.js", "session.js", "mic-worklet.js"):
         r = client.get(f"/static/{name}")
         assert r.status_code == 200 and "javascript" in r.headers["content-type"]
+
+
+def test_check_page_starts_an_echo_check(client, fake_attendee):
+    assert client.get("/check").status_code == 200
+    r = client.post("/check", data={"meeting_link": TEAMS_LINK}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/check?session=")
+    session_id = r.headers["location"].rsplit("=", 1)[1]
+    page = client.get(r.headers["location"])
+    assert page.status_code == 200 and f'data-session-id="{session_id}"' in page.text
+    data = client.get(f"/api/sessions/{session_id}").json()
+    assert data["kind"] == "check" and data["warnings"] == []
+    assert fake_attendee.created[0]["meeting_url"] == TEAMS_LINK
+
+
+def test_check_form_rejects_bad_link(client):
+    r = client.post("/check", data={"meeting_link": "https://zoom.us/j/1"})
+    assert r.status_code == 400 and "Teams meeting link" in html.unescape(r.text)
+
+
+def test_speed_test_runs_in_the_background(client):
+    import time
+
+    from interviewer.ai.fakes import FakeLLM
+
+    answered = {"label": "answered", "evidence_note": "", "follow_up_index": None, "custom_follow_up": None}
+    client.app.state.llm_factory = lambda model: FakeLLM([answered, answered])
+    assert client.get("/api/bench").json() == {"running": False, "report": None, "error": None}
+    assert client.post("/api/bench", data={"models": "fake-model"}).status_code == 202
+    for _ in range(200):
+        state = client.get("/api/bench").json()
+        if not state["running"]:
+            break
+        time.sleep(0.01)
+    assert state["error"] is None and "fake-model" in state["report"]

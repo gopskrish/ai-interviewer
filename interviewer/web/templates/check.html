@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Day-one check · AI Interviewer{% endblock %}
+{% block content %}
+<h1>Day-one check</h1>
+<p>Run this once before any interview. It passes when the bot gets into the call, you hear its greeting in Teams,
+what you say shows up below as text, the bot's own voice doesn't, and the speed test passes.</p>
+
+<section>
+  <h2>1. Echo test in Teams</h2>
+  {% if not attendee_ready %}
+  <p class="notice">This needs Attendee. Set <code>ATTENDEE_API_KEY</code> in <code>.env</code> and restart the interviewer.</p>
+  {% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/check" class="inline">
+    <label>Teams meeting link
+      <input name="meeting_link" value="{{ meeting_link }}" required size="60" autocomplete="off">
+    </label>
+    <button class="primary" type="submit">Start check</button>
+  </form>
+  {% if session_id %}
+  <div id="check" data-session-id="{{ session_id }}">
+    <dl class="facts">
+      <dt>Bot</dt><dd id="bot">—</dd>
+      <dt>Status</dt><dd id="status">—</dd>
+    </dl>
+    <p id="warnings" class="error" hidden></p>
+    <p class="hint">Once the bot is in the call, say hello. It greets you, then repeats each sentence you say.
+      Check that you hear it in Teams and that only your words appear below.</p>
+    <p class="actions"><button id="end">End check</button> <a href="/sessions/{{ session_id }}">Session page</a></p>
+    <ol id="transcript" class="transcript"></ol>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>2. Speed test</h2>
+  <p>Times text-to-speech, speech-to-text and one interview decision on this PC. Allow a minute or two per model.
+    To compare models, pull them first (for example <code>docker compose exec ollama ollama pull llama3.2:3b</code>)
+    and list them here, separated by commas.</p>
+  <form id="bench-form" class="inline">
+    <label>Ollama models <input name="models" value="{{ models }}" size="50"></label>
+    <button class="primary" type="submit">Run speed test</button>
+  </form>
+  <pre id="bench-report" class="report">{{ bench_report or "" }}</pre>
+</section>
+{% endblock %}
+{% block scripts %}
+<script type="module">
+  import { poll, post, renderTranscript } from '/static/session.js';
+
+  const root = document.getElementById('check');
+  if (root) {
+    const id = root.dataset.sessionId;
+    const endButton = document.getElementById('end');
+    const warnings = document.getElementById('warnings');
+    endButton.addEventListener('click', async () => {
+      endButton.disabled = true;
+      try { await post(`/api/sessions/${id}/end`); } catch (error) { warnings.textContent = error.message; warnings.hidden = false; }
+    });
+    poll(id, (data) => {
+      if (!data) return;
+      document.getElementById('bot').textContent = data.bot_label || '—';
+      document.getElementById('status').textContent = data.error ? `${data.status_label}: ${data.error}` : data.status_label;
+      const found = data.warnings || [];
+      warnings.hidden = !found.length;
+      if (found.length) warnings.textContent = found.join(' ');
+      renderTranscript(document.getElementById('transcript'), data.transcript);
+      if (!data.live) endButton.disabled = true;
+    });
+  }
+
+  const form = document.getElementById('bench-form');
+  const report = document.getElementById('bench-report');
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const response = await fetch('/api/bench', { method: 'POST', body: new URLSearchParams(new FormData(form)) });
+    if (!response.ok) {
+      report.textContent = (await response.json()).error;
+      return;
+    }
+    report.textContent = 'Running… allow a minute or two per model.';
+    const timer = setInterval(async () => {
+      const state = await (await fetch('/api/bench', { cache: 'no-store' })).json();
+      if (state.running) return;
+      clearInterval(timer);
+      report.textContent = state.error ? `The speed test failed: ${state.error}` : state.report;
+    }, 2000);
+  });
+</script>
+{% endblock %}

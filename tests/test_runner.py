@@ -228,3 +228,18 @@ async def test_reattach_restarts_the_silence_clock(tmp_path):
     clock.now += 10.5
     await runner.tick()
     assert engine.silences == [10]
+
+
+async def test_turn_during_greeting_counts_when_the_engine_asks_no_consent(tmp_path):
+    greeting = "This is a long greeting that keeps playing for several seconds. " * 8
+    engine = FakeEngine()
+    engine.asks_consent = False  # like the day-one check's echo engine
+    engine.start = lambda: [Say(greeting, "script")]
+    runner, _, _, _ = make_runner(tmp_path, engine, stt=FakeSTT(["Hello, this is the AI"]))
+    begin = asyncio.create_task(runner.begin())
+    while runner.speaking_text != greeting:
+        await asyncio.sleep(0)
+    await feed(runner, tone(1.0) + silence(3.1), wait=False)
+    await begin
+    await runner.idle()
+    assert engine.turns == ["Hello, this is the AI"]

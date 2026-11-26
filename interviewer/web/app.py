@@ -6,8 +6,10 @@ Run with: ``uvicorn interviewer.web.app:create_app --factory``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import mimetypes
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
@@ -19,12 +21,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.websockets import WebSocketDisconnect
 
+from interviewer.ai.base import LanguageModel
 from interviewer.ai.factory import build_ai
+from interviewer.ai.ollama import OllamaLLM
 from interviewer.attendee import AttendeeClient, MeetingLinkError, status_label
 from interviewer.config import Settings
+from interviewer.daycheck import assess_echo, run_bench
 from interviewer.kit import list_kits
 from interviewer.session.manager import STATUS_LABELS, SessionError, SessionManager
 from interviewer.session.store import SessionStore
+from interviewer.session.transcript import Transcript, Turn
 
 log = logging.getLogger(__name__)
 
@@ -46,8 +52,24 @@ def build_manager(settings: Settings, http: httpx.AsyncClient) -> SessionManager
     return SessionManager(settings, SessionStore(settings.data_dir), ai, kits, attendee, http)
 
 
+class BenchJob:
+    """The speed test from the check page, run in the background one at a time."""
+
+    def __init__(self) -> None:
+        self.task: asyncio.Task | None = None
+        self.report: str | None = None
+        self.error: str | None = None
+
+    @property
+    def running(self) -> bool:
+        return self.task is not None and not self.task.done()
+
+    def state(self) -> dict:
+        return {"running": self.running, "report": self.report, "error": self.error}
+
+
 def create_app(settings: Settings | None = None, manager: SessionManager | None = None, *,
-               background: bool = True) -> FastAPI:
+               background: bool = True, llm_factory: Callable[[str], LanguageModel] | None = None) -> FastAPI:
     owned_http: httpx.AsyncClient | None = None
     if manager is None:
         settings = settings or Settings.from_env()
@@ -69,6 +91,8 @@ def create_app(settings: Settings | None = None, manager: SessionManager | None 
     app = FastAPI(title="AI Interviewer", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.manager = manager
     app.state.settings = settings
+    app.state.bench = BenchJob()
+    app.state.llm_factory = llm_factory or (lambda model: OllamaLLM(settings.ollama_url, model, manager.http))
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
     def reload_kits() -> dict[str, str]:
@@ -146,6 +170,9 @@ def create_app(settings: Settings | None = None, manager: SessionManager | None 
         snapshot = manager.snapshot(session_id)
         if snapshot is None:
             return JSONResponse({"error": "There's no such session."}, status_code=404)
+        if snapshot["kind"] == "check":
+            heard = Transcript([Turn(t["speaker"], t["text"], 0.0, 0.0) for t in snapshot["transcript"]])
+            snapshot["warnings"] = assess_echo(heard)
         return snapshot
 
     @app.post("/api/sessions/{session_id}/begin")
@@ -178,6 +205,57 @@ def create_app(settings: Settings | None = None, manager: SessionManager | None 
         ws_url = base.replace("http", "ws", 1) + f"?token={record.token}"
         return page(request, "practice.html", {"record": record, "ws_url": ws_url, "kits": kit_choices(),
                                                "kit_id": kit_id})
+
+    def check_page(request: Request, session_id: str | None = None, error: str | None = None,
+                   meeting_link: str = "", status_code: int = 200) -> HTMLResponse:
+        bench: BenchJob = app.state.bench
+        return page(request, "check.html", {"session_id": session_id, "error": error, "meeting_link": meeting_link,
+                                            "models": settings.ollama_model, "bench_report": bench.report,
+                                            "attendee_ready": manager.attendee is not None}, status_code)
+
+    @app.get("/check", response_class=HTMLResponse)
+    async def check(request: Request, session: str = ""):
+        session_id = session if session and manager.record(session) is not None else None
+        return check_page(request, session_id)
+
+    @app.post("/check")
+    async def start_check(request: Request, meeting_link: str = Form("")):
+        try:
+            record = await manager.create_check(meeting_link)
+        except (SessionError, MeetingLinkError) as exc:
+            return check_page(request, error=str(exc), meeting_link=meeting_link, status_code=400)
+        return RedirectResponse(f"/check?session={record.id}", status_code=303)
+
+    @app.get("/api/bench")
+    async def bench_state():
+        return app.state.bench.state()
+
+    @app.post("/api/bench")
+    async def start_bench(models: str = Form("")):
+        bench: BenchJob = app.state.bench
+        if bench.running:
+            return JSONResponse({"error": "A speed test is already running."}, status_code=409)
+        if manager.any_live():
+            return JSONResponse({"error": "Finish the live session first: the speed test needs the whole CPU."},
+                                status_code=409)
+        names = [m.strip() for m in models.split(",") if m.strip()] or [settings.ollama_model]
+        reload_kits()
+        if not manager.kits:
+            return JSONResponse({"error": "There are no usable interview kits."}, status_code=409)
+        kit = manager.kits[sorted(manager.kits)[0]]
+
+        async def run() -> None:
+            try:
+                report = await run_bench(manager.ai, names, app.state.llm_factory, kit,
+                                         llm_timeout_s=settings.llm_timeout_s)
+                bench.report = report.to_text()
+            except Exception as exc:  # shown on the page instead of disappearing into the log
+                log.exception("speed test failed")
+                bench.error = str(exc) or type(exc).__name__
+
+        bench.report, bench.error = None, None
+        bench.task = asyncio.create_task(run())
+        return JSONResponse({"ok": True}, status_code=202)
 
     @app.websocket("/ws/audio/{session_id}", name="audio_ws")
     async def audio_ws(websocket: WebSocket, session_id: str, token: str = ""):
