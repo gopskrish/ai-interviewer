@@ -108,7 +108,11 @@ class SessionRunner:
         return self._current_say.text if self._current_say else None
 
     def attach(self, send: Send) -> None:
+        """Start sending to ``send``. On a reconnect, the time away doesn't count as silence."""
         self._send = send
+        self._last_audio_at = None
+        if self._quiet_since is not None:
+            self._quiet_since = self._clock()
 
     def detach(self) -> None:
         self._send = None

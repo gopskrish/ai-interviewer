@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}New interview · AI Interviewer{% endblock %}
+{% block content %}
+<h1>New interview</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if not attendee_ready %}
+<p class="notice">Teams interviews need Attendee. Set <code>ATTENDEE_API_KEY</code> in <code>.env</code> and restart the interviewer.</p>
+{% endif %}
+<form method="post" action="/sessions" class="stack">
+  <label>Kit
+    <select name="kit_id" required>
+    {% for kit_id, role in kits %}
+      <option value="{{ kit_id }}"{% if kit_id == form.kit_id %} selected{% endif %}>{{ role }} ({{ kit_id }})</option>
+    {% endfor %}
+    </select>
+  </label>
+  <label>Candidate's name
+    <input name="candidate_name" value="{{ form.candidate_name or '' }}" required autocomplete="off">
+  </label>
+  <label>Teams meeting link
+    <input name="meeting_link" value="{{ form.meeting_link or '' }}" required autocomplete="off"
+           placeholder="https://teams.microsoft.com/l/meetup-join/…">
+  </label>
+  <label>Resume notes (optional)
+    <textarea name="notes" rows="6" placeholder="A few lines from the resume, to tailor the two experience questions.">{{ form.notes or '' }}</textarea>
+  </label>
+  <p class="hint">With resume notes, starting can take up to a minute while the questions are written.</p>
+  <p><button class="primary" type="submit">Start</button></p>
+</form>
+<section class="hint">
+  <h2>Before you start</h2>
+  <ul>
+    <li>In the meeting options, set "Who can bypass the lobby" to Everyone, or be ready to admit "AI Interviewer" from the lobby.</li>
+    <li>The bot says it's an AI and that the session is recorded, and asks for consent before any question.</li>
+    <li>Trial rule: colleagues only, never real candidates.</li>
+  </ul>
+</section>
+{% endblock %}

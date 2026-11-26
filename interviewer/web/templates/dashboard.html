@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Interviews</h1>
+<p class="actions">
+  <a class="button primary" href="/start">New interview</a>
+  <a class="button" href="/practice">Practice with your microphone</a>
+  <a class="button" href="/check">Day-one check</a>
+</p>
+{% if not attendee_ready %}
+<p class="notice">Teams interviews are off until <code>ATTENDEE_API_KEY</code> is set in <code>.env</code>. Practice works now.</p>
+{% endif %}
+{% if kit_errors %}
+<section class="problems">
+  <h2>Kits with problems</h2>
+  <p>These kits can't be used until they're fixed:</p>
+  <ul>
+  {% for name, problem in kit_errors.items() %}
+    <li><strong>{{ name }}</strong>: <pre>{{ problem }}</pre></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% if sessions %}
+<table class="sessions">
+  <thead><tr><th>Started</th><th>Candidate</th><th>Type</th><th>Kit</th><th>Status</th><th>Bot</th></tr></thead>
+  <tbody>
+  {% for s in sessions %}
+    <tr>
+      <td><time datetime="{{ s.created_at }}">{{ s.created_at[:16] | replace("T", " ") }} UTC</time></td>
+      <td><a href="/sessions/{{ s.id }}">{{ s.candidate_name }}</a></td>
+      <td>{{ s.kind }}</td>
+      <td>{{ s.kit_id }}</td>
+      <td><span class="status status-{{ s.status }}">{{ s.status_label }}</span></td>
+      <td>{{ s.bot_label }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No sessions yet. Start with the day-one check, then a practice interview.</p>
+{% endif %}
+<p class="hint">Trial rule: interview colleagues only, never real candidates. Sessions are deleted after {{ retention_days }} days.</p>
+{% endblock %}

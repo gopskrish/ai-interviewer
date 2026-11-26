@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import json
 import wave
 
 from interviewer.ai.fakes import FakeLLM, FakeSTT, FakeTTS
@@ -8,7 +7,7 @@ from interviewer.engine.engine import NUDGE_GENTLE, NUDGE_TAKE_TIME, End, Interv
 from interviewer.session.runner import SessionRunner
 from interviewer.session.speech_cache import SpeechCache
 from interviewer.session.store import SessionStore
-from tests.helpers import FakeClock, LoudnessVad, silence, tone
+from tests.helpers import FakeClock, LoudnessVad, collector, feed, silence, tone
 
 INTRO = "Intro line. Is that OK with you?"
 
@@ -43,11 +42,6 @@ class FakeEngine:
         return []
 
 
-def mixed(pcm, rate=16000):
-    return json.dumps({"trigger": "realtime_audio.mixed", "bot_id": "b",
-                       "data": {"chunk": base64.b64encode(pcm).decode(), "timestamp_ms": 0, "sample_rate": rate}})
-
-
 def make_runner(tmp_path, engine, stt=None, tts=None, attach=True):
     clock, sent = FakeClock(), []
     store = SessionStore(tmp_path)
@@ -61,15 +55,6 @@ def make_runner(tmp_path, engine, stt=None, tts=None, attach=True):
     if attach:
         runner.attach(send)
     return runner, sent, clock, store
-
-
-async def feed(runner, pcm, chunk_s=0.1, rate=16000, wait=True):
-    step = int(rate * chunk_s) * 2
-    for i in range(0, len(pcm), step):
-        await runner.handle_message(mixed(pcm[i:i + step], rate))
-        await asyncio.sleep(0)
-    if wait:
-        await runner.idle()
 
 
 def sent_seconds(sent):
@@ -226,3 +211,20 @@ async def test_meeting_audio_is_recorded_at_16k(tmp_path):
     await runner.end("ended_by_owner")
     with wave.open(str(store.dir(runner.record.id) / "meeting-audio.wav"), "rb") as w:
         assert w.getframerate() == 16000 and abs(w.getnframes() - 8000) <= 16
+
+
+async def test_reattach_restarts_the_silence_clock(tmp_path):
+    engine = FakeEngine(stage=Stage.WARMUP)
+    runner, sent, clock, _ = make_runner(tmp_path, engine)
+    await runner.begin()
+    await runner.idle()
+    await feed(runner, silence(0.5))
+    runner.detach()
+    clock.now += 120  # the connection was down for two minutes
+    runner.attach(collector([]))
+    await runner.tick()
+    assert engine.silences == []  # the time away isn't silence the candidate needs nudging for
+    await feed(runner, silence(0.3))
+    clock.now += 10.5
+    await runner.tick()
+    assert engine.silences == [10]

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Practice · AI Interviewer{% endblock %}
+{% block content %}
+<h1>Practice interview</h1>
+<p>Talk to the interviewer with your microphone. Nothing goes to Teams. Use headphones so the AI doesn't hear itself.</p>
+<form method="get" action="/practice" class="inline">
+  <label>Kit
+    <select name="kit_id">
+    {% for id, role in kits %}
+      <option value="{{ id }}"{% if id == kit_id %} selected{% endif %}>{{ role }} ({{ id }})</option>
+    {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Use this kit</button>
+</form>
+<div id="practice" data-session-id="{{ record.id }}" data-ws-url="{{ ws_url }}">
+  <p class="actions">
+    <button id="start" class="primary">Start microphone</button>
+    <button id="begin" disabled>Begin now</button>
+    <button id="end" disabled>End practice</button>
+  </p>
+  <p id="status" class="status-line">Click "Start microphone", then say hello. The interviewer starts when you stop talking.</p>
+  <p id="speaking" class="speaking"></p>
+  <ol id="transcript" class="transcript"></ol>
+  <p class="hint">Afterwards, the <a href="/sessions/{{ record.id }}">session page</a> has the transcript and scorecard.</p>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/practice.js"></script>{% endblock %}

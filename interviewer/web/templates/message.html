@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · AI Interviewer{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p>{{ message }}</p>
+{% if details %}
+<ul class="problems">{% for name, problem in details.items() %}<li><strong>{{ name }}</strong>: <pre>{{ problem }}</pre></li>{% endfor %}</ul>
+{% endif %}
+<p><a href="/">Back to the dashboard</a></p>
+{% endblock %}

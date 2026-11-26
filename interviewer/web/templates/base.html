@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}AI Interviewer{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">AI Interviewer</a>
+  <nav>
+    <a href="/start">New interview</a>
+    <a href="/practice">Practice</a>
+    <a href="/check">Day-one check</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<script>
+  for (const el of document.querySelectorAll("time[datetime]")) {
+    const when = new Date(el.getAttribute("datetime"));
+    if (!Number.isNaN(when.getTime())) el.textContent = when.toLocaleString([], {dateStyle: "medium", timeStyle: "short"});
+  }
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
